@@ -296,7 +296,6 @@ def login():
     # 로그인은 id가 PK라서 결과가 최대 1개
     # 그래서 fetchone() 사용
     row = cur.fetchone()
-
     conn.close()
 
     # 검색 결과가 있으면 로그인 성공
@@ -322,9 +321,19 @@ def login():
 # STEP 3. 게시글 작성
 # =========================================================
 def write_post(current_user):
-    # current_user = 현재 로그인한 사용자의 id
+    conn, cur = connection()
+    b_title = input("제목: ")
+    b_text = input("내용: ")
+
+    # 현재 로그인한 사용자의 id
+    writer = current_user
+
     # 제목/내용을 입력받고 writer에는 current_user를 저장할 예정
-    pass
+    cur.execute("INSERT INTO boardTable (b_title, b_text, writer) VALUES(%s, %s, %s)",
+                (b_title, b_text, writer))
+
+    conn.commit()
+    conn.close()
 
 
 # =========================================================
@@ -349,9 +358,30 @@ def view_post():
 # STEP 5. 댓글 작성
 # =========================================================
 def write_comment(current_user):
+    conn,cur = connection()
+    while True:
+        b_id = input("게시글 번호입력: ")
+        # 1,게시글 번호인지 확인해야하지만 입력을받아 존재하는지 확인하는 과정을 구현 (현재 과제에선 이게 최선)
+        cur.execute("SELECT * FROM boardTable WHERE b_id=%s",
+                    (b_id,))
+        row = cur.fetchone()  # 2.DB검색 결과에서 찾아옴
+        if row:
+            print("게시글 확인")
+            break
+        else:
+            print("존재하지 않는 게시글입니다.")
+            continue
+
+    C_writer = current_user  # 커런트 유저가 id 연결되어있음  id
+    C_text = input("댓글 내용: ")
+
+    cur.execute("INSERT INTO commentTable(C_number, C_writer, C_text) VALUES(%s, %s, %s)",
+                (C_writer, C_text, C_text))
+
+    conn.commit()
+    conn.close()
     # 먼저 입력받은 게시글 번호가 실제 존재하는지 확인
     # 존재하면 C_writer에 current_user를 넣어서 댓글 저장할 예정
-    pass
 
 
 # =========================================================
