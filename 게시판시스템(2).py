@@ -54,7 +54,7 @@ def create_board_table():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS boardTable (
             b_id BIGINT AUTO_INCREMENT PRIMARY KEY, -- 게시글 번호 자동 증가
-            b_title VARCHAR(20) NOT NULL,            -- 제목
+            b_title VARCHAR(50) NOT NULL,            -- 제목
             b_text VARCHAR(1000) NOT NULL,          -- 내용
             writer CHAR(20) NOT NULL,               -- 게시글 작성자
             reg_date DATETIME DEFAULT CURRENT_TIMESTAMP, -- 작성시간 자동 등록
@@ -340,58 +340,207 @@ def write_post(current_user):
 # STEP 4. 게시글 목록 조회
 # =========================================================
 def list_posts():
-    # boardTable과 userTable을 JOIN해서
-    # 글번호 / 제목 / 작성자 이름 / 작성일을 출력할 예정
-    pass
+    conn, cur = connection()
+
+    # boardTable에는 작성자의 id만 저장되어있기 때문에
+    # userTable과 JOIN해서 작성자의 이름을 가져옴
+    cur.execute("""
+        SELECT boardTable.b_id,
+               boardTable.b_title,
+               userTable.name,
+               boardTable.reg_date
+        FROM boardTable
+        JOIN userTable
+        ON boardTable.writer = userTable.id
+        ORDER BY boardTable.reg_date DESC
+    """)
+
+    # 게시글은 여러개가 있을수 있으므로 fetchall()
+    rows = cur.fetchall()
+
+    print("\n===== 게시글 목록 =====")
+
+    # 게시글이 있으면 하나씩 출력
+    if rows:
+        for row in rows:
+            print(f"글번호: {row[0]}")
+            print(f"제목: {row[1]}")
+            print(f"작성자: {row[2]}")
+            print(f"작성일: {row[3]}")
+            print("--------------------")
+
+    else:
+        print("등록된 게시글이 없습니다.")
+
+    conn.close()
 
 
 # =========================================================
 # STEP 4. 게시글 상세 조회
 # =========================================================
 def view_post():
-    # 게시글 번호를 입력받아서
-    # 해당 게시글 본문 + 그 게시글에 달린 댓글을 출력할 예정
-    pass
+    conn, cur = connection()
+
+    b_id = input("조회할 게시글 번호: ")
+
+    # 게시글 작성자 이름도 같이 출력하기 위해 userTable과 JOIN
+    cur.execute("""
+        SELECT boardTable.b_id,
+               boardTable.b_title,
+               boardTable.b_text,
+               userTable.name,
+               boardTable.reg_date
+        FROM boardTable
+        JOIN userTable
+        ON boardTable.writer = userTable.id
+        WHERE boardTable.b_id=%s
+    """, (b_id,))
+
+    # 게시글 번호는 PK이므로 결과는 최대 1개
+    row = cur.fetchone()
+
+    # 게시글이 존재하는지 확인
+    if row:
+        print("\n===== 게시글 상세 =====")
+        print(f"글번호: {row[0]}")
+        print(f"제목: {row[1]}")
+        print(f"내용: {row[2]}")
+        print(f"작성자: {row[3]}")
+        print(f"작성일: {row[4]}")
+
+        # 해당 게시글 번호에 작성된 댓글 검색
+        # 댓글 작성자의 이름을 가져오기 위해 userTable과 JOIN
+        cur.execute("""
+            SELECT commentTable.C_num,
+                   userTable.name,
+                   commentTable.C_text,
+                   commentTable.C_reg_date
+            FROM commentTable
+            JOIN userTable
+            ON commentTable.C_writer = userTable.id
+            WHERE commentTable.C_number=%s
+            ORDER BY commentTable.C_reg_date ASC
+        """, (b_id,))
+
+        # 한 게시글에는 댓글이 여러개 있을수 있으므로 fetchall()
+        comments = cur.fetchall()
+
+        print("\n===== 댓글 =====")
+
+        if comments:
+            for comment in comments:
+                print(f"댓글번호: {comment[0]}")
+                print(f"작성자: {comment[1]}")
+                print(f"내용: {comment[2]}")
+                print(f"작성일: {comment[3]}")
+                print("--------------------")
+
+        else:
+            print("등록된 댓글이 없습니다.")
+
+    else:
+        print("존재하지 않는 게시글입니다.")
+
+    conn.close()
+
 
 
 # =========================================================
 # STEP 5. 댓글 작성
 # =========================================================
 def write_comment(current_user):
-    conn,cur = connection()
+    conn, cur = connection()
+
+    # 게시글 번호가 실제 존재하는지 확인
     while True:
         b_id = input("게시글 번호입력: ")
-        # 1,게시글 번호인지 확인해야하지만 입력을받아 존재하는지 확인하는 과정을 구현 (현재 과제에선 이게 최선)
-        cur.execute("SELECT * FROM boardTable WHERE b_id=%s",
-                    (b_id,))
-        row = cur.fetchone()  # 2.DB검색 결과에서 찾아옴
+
+        # 입력받은 게시글 번호를 DB에서 검색
+        cur.execute(
+            "SELECT * FROM boardTable WHERE b_id=%s",
+            (b_id,)
+        )
+
+        # DB검색 결과에서 하나 가져옴
+        row = cur.fetchone()
+
+        # 게시글이 존재하면 반복문 종료
         if row:
             print("게시글 확인")
             break
+
+        # 존재하지 않으면 다시 게시글 번호 입력
         else:
             print("존재하지 않는 게시글입니다.")
             continue
 
-    C_writer = current_user  # 커런트 유저가 id 연결되어있음  id
+    # 현재 로그인한 사용자의 id를 댓글 작성자로 사용
+    C_writer = current_user
+
+    # 댓글 내용 입력
     C_text = input("댓글 내용: ")
 
-    cur.execute("INSERT INTO commentTable(C_number, C_writer, C_text) VALUES(%s, %s, %s)",
-                (C_writer, C_text, C_text))
+    # C_number에는 위에서 확인한 게시글 번호
+    # C_writer에는 현재 로그인한 사용자 id
+    # C_text에는 입력받은 댓글 내용 저장
+    cur.execute("""
+        INSERT INTO commentTable(C_number, C_writer, C_text)
+        VALUES(%s, %s, %s)
+    """, (b_id, C_writer, C_text))
 
     conn.commit()
     conn.close()
-    # 먼저 입력받은 게시글 번호가 실제 존재하는지 확인
-    # 존재하면 C_writer에 current_user를 넣어서 댓글 저장할 예정
+
+    print("댓글 작성 완료!!")
+
 
 
 # =========================================================
 # STEP 6. 게시글 삭제
 # =========================================================
 def delete_post(current_user):
-    # 삭제하려는 게시글의 writer를 먼저 확인
-    # writer와 current_user가 같으면 본인의 글이므로 삭제
-    # 다르면 다른 사람의 글이므로 권한 없음
-    pass
+    conn, cur = connection()
+
+    b_id = input("삭제할 게시글 번호: ")
+
+    # 삭제하려는 게시글이 존재하는지 검색
+    # 작성자가 누구인지 확인하기 위해 writer를 가져옴
+    cur.execute(
+        "SELECT writer FROM boardTable WHERE b_id=%s",
+        (b_id,)
+    )
+
+    row = cur.fetchone()
+
+    # 게시글 자체가 없는 경우
+    if row is None:
+        print("존재하지 않는 게시글입니다.")
+        conn.close()
+        return
+
+    # row[0]에는 게시글을 작성한 사용자의 id가 들어있음
+    writer = row[0]
+
+    # 게시글 작성자와 현재 로그인 사용자가 같은지 확인
+    if writer == current_user:
+
+        # 본인이 작성한 게시글이면 삭제
+        cur.execute(
+            "DELETE FROM boardTable WHERE b_id=%s",
+            (b_id,)
+        )
+
+        conn.commit()
+
+        # commentTable에 ON DELETE CASCADE가 있기 때문에
+        # 게시글에 달린 댓글은 DB에서 같이 삭제됨
+        print("게시글이 삭제되었습니다.")
+
+    else:
+        # 다른 사람이 작성한 게시글이면 삭제하지 않음
+        print("본인이 작성한 게시글만 삭제할 수 있습니다.")
+
+    conn.close()
 
 
 # =========================================================
